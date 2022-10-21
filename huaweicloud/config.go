@@ -1,7 +1,9 @@
 package main
 
 import (
+	"github.com/opensourceways/community-robot-lib/mq"
 	"github.com/opensourceways/community-robot-lib/utils"
+	"github.com/opensourceways/xihe-training-center/huaweicloud/syncjobstatusimpl"
 
 	"github.com/opensourceways/xihe-training-center/domain"
 	"github.com/opensourceways/xihe-training-center/huaweicloud/syncrepoimpl"
@@ -19,11 +21,13 @@ type configValidate interface {
 }
 
 type configuration struct {
-	Sync     syncrepoimpl.Config `json:"sync"      required:"true"`
-	Mysql    mysql.Config        `json:"mysql"     required:"true"`
-	Gitlab   platformimpl.Config `json:"gitlab"    required:"true"`
-	Domain   domain.Config       `json:"domain"`
-	Training trainingimpl.Config `json:"training"  required:"true"`
+	Sync      syncrepoimpl.Config      `json:"sync"      required:"true"`
+	Mysql     mysql.Config             `json:"mysql"     required:"true"`
+	Gitlab    platformimpl.Config      `json:"gitlab"    required:"true"`
+	Domain    domain.Config            `json:"domain"`
+	Training  trainingimpl.Config      `json:"training"  required:"true"`
+	MQ        mq.MQConfig              `json:"mq"`
+	JobStatus syncjobstatusimpl.Config `json:"job_status"`
 }
 
 func (cfg *configuration) configItems() []interface{} {
@@ -33,6 +37,7 @@ func (cfg *configuration) configItems() []interface{} {
 		&cfg.Gitlab,
 		&cfg.Domain,
 		&cfg.Training,
+		&cfg.JobStatus,
 	}
 }
 

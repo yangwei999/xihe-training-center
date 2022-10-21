@@ -15,7 +15,7 @@ import (
 	"github.com/opensourceways/xihe-training-center/huaweicloud/modelarts"
 )
 
-var statusMap = map[string]domain.TrainingStatus{
+var StatusMap = map[string]domain.TrainingStatus{
 	"failed":      domain.TrainingStatusFailed,
 	"pending":     domain.TrainingStatusPending,
 	"running":     domain.TrainingStatusRunning,
@@ -185,7 +185,7 @@ func (impl trainingImpl) Get(jobId string) (r domain.JobDetail, err error) {
 		return
 	}
 
-	if status, ok := statusMap[strings.ToLower(v.Status.Phase)]; ok {
+	if status, ok := StatusMap[strings.ToLower(v.Status.Phase)]; ok {
 		r.Status = status
 	} else {
 		r.Status = domain.TrainingStatusAbnormal
