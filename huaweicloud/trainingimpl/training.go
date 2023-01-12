@@ -83,10 +83,10 @@ type trainingImpl struct {
 }
 
 func (impl trainingImpl) genJobParameter(t *domain.UserTraining, opt *modelarts.JobCreateOption) {
-	if n := len(t.Hypeparameters); n > 0 {
+	if n := len(t.Hyperparameters); n > 0 {
 		p := make([]modelarts.ParameterOption, n)
 
-		for i, v := range t.Hypeparameters {
+		for i, v := range t.Hyperparameters {
 			s := ""
 			if v.Value != nil {
 				s = v.Value.CustomizedValue()

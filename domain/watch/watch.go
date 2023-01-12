@@ -11,6 +11,5 @@ type TrainingInfo struct {
 }
 
 type WatchService interface {
-	WatchTraining(*TrainingInfo)
-	RegisterTrainingDone(func(*TrainingInfo))
+	ApplyWatch(f func(*TrainingInfo) error) (err error)
 }

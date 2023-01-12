@@ -19,7 +19,6 @@ type KeyValue = controller.KeyValue
 type Compute = controller.Compute
 type Input = controller.Input
 
-type JobDetail = app.JobDetailDTO
 type JobInfo = app.JobInfoDTO
 
 func NewTrainingCenter(endpoint string) TrainingCenter {
@@ -80,17 +79,6 @@ func (t TrainingCenter) TerminateTraining(jobId string) error {
 	}
 
 	return t.forwardTo(req, nil)
-}
-
-func (t TrainingCenter) GetTraining(jobId string) (r JobDetail, err error) {
-	req, err := http.NewRequest(http.MethodGet, t.jobURL(jobId), nil)
-	if err != nil {
-		return
-	}
-
-	err = t.forwardTo(req, &r)
-
-	return
 }
 
 func (t TrainingCenter) GetLogDownloadURL(jobId string) (r DownloadURL, err error) {

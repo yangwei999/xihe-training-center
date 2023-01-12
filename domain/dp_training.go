@@ -22,6 +22,13 @@ var (
 	TrainingStatusCompleted   = trainingStatus("Completed")
 	TrainingStatusTerminated  = trainingStatus("Terminated")
 	TrainingStatusTerminating = trainingStatus("Terminating")
+
+	trainingDoneStatus = map[string]bool{
+		"Failed":     true,
+		"Abnormal":   true,
+		"Completed":  true,
+		"Terminated": true,
+	}
 )
 
 // Account
@@ -248,7 +255,7 @@ func (s trainingStatus) TrainingStatus() string {
 }
 
 func (s trainingStatus) IsDone() bool {
-	return string(s) != TrainingStatusRunning.TrainingStatus()
+	return trainingDoneStatus[string(s)]
 }
 
 func (s trainingStatus) IsSuccess() bool {

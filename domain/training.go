@@ -24,11 +24,11 @@ type TrainingConfig struct {
 	CodeDir  Directory
 	BootFile FilePath
 
-	Hypeparameters []KeyValue
-	Env            []KeyValue
-	Inputs         []Input
-	EnableAim      bool
-	EnableOutput   bool
+	Hyperparameters []KeyValue
+	Env             []KeyValue
+	Inputs          []Input
+	EnableAim       bool
+	EnableOutput    bool
 
 	Compute Compute
 }
@@ -73,8 +73,8 @@ type JobDetail struct {
 }
 
 type JobInfo struct {
-	JobId     string
-	LogDir    string
-	AimDir    string
-	OutputDir string
+	JobId     string `json:"job_id"`
+	LogDir    string `json:"log_dir"`
+	AimDir    string `json:"aim_dir"`
+	OutputDir string `json:"output_dir"`
 }

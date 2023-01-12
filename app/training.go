@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/sirupsen/logrus"
 
@@ -51,7 +50,7 @@ func (cmd *TrainingCreateCmd) Validate() error {
 		return nil
 	}
 
-	if f(cmd.Hypeparameters) != nil {
+	if f(cmd.Hyperparameters) != nil {
 		return err
 	}
 
@@ -70,17 +69,7 @@ func (cmd *TrainingCreateCmd) Validate() error {
 	return nil
 }
 
-type JobInfoDTO struct {
-	JobId     string `json:"job_id"`
-	LogDir    string `json:"log_dir"`
-	AimDir    string `json:"aim_dir"`
-	OutputDir string `json:"output_dir"`
-}
-
-type JobDetailDTO struct {
-	Status   string `json:"status"`
-	Duration int    `json:"duration"`
-}
+type JobInfoDTO = domain.JobInfo
 
 type TrainingService interface {
 	Create(cmd *TrainingCreateCmd) (JobInfoDTO, error)
@@ -96,20 +85,13 @@ func NewTrainingService(
 	ws watch.WatchService,
 	log *logrus.Entry,
 	lock synclock.RepoSyncLock,
-	maxTrainingNum int,
 ) TrainingService {
-	t := &trainingService{
+	return &trainingService{
 		ts:  ts,
 		ws:  ws,
 		log: log,
 		ss:  newSyncService(ts, pf, log, lock),
-
-		maxTrainingNum: maxTrainingNum,
 	}
-
-	ws.RegisterTrainingDone(t.callback)
-
-	return t
 }
 
 type trainingService struct {
@@ -117,28 +99,35 @@ type trainingService struct {
 	log *logrus.Entry
 	ts  training.Training
 	ws  watch.WatchService
-
-	lock           sync.RWMutex
-	currentNum     int
-	maxTrainingNum int
 }
 
-func (s *trainingService) callback(*watch.TrainingInfo) {
-	s.lock.Lock()
-	s.currentNum--
-	s.lock.Unlock()
-}
+func (s *trainingService) Create(cmd *TrainingCreateCmd) (JobInfoDTO, error) {
+	dto := JobInfoDTO{}
 
-func (s *trainingService) Create(cmd *TrainingCreateCmd) (dto JobInfoDTO, err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	f := func(info *watch.TrainingInfo) error {
+		v, err := s.create(cmd)
+		if err != nil {
+			return err
+		}
 
-	if s.currentNum >= s.maxTrainingNum {
-		err = errors.New("too many trainings")
+		dto = v
 
-		return
+		*info = watch.TrainingInfo{
+			User:       cmd.User,
+			ProjectId:  cmd.ProjectId,
+			TrainingId: cmd.TrainingId,
+			JobInfo:    v,
+		}
+
+		return nil
 	}
 
+	err := s.ws.ApplyWatch(f)
+
+	return dto, err
+}
+
+func (s *trainingService) create(cmd *TrainingCreateCmd) (info domain.JobInfo, err error) {
 	err = s.ss.syncProject(cmd.User, cmd.ProjectName, cmd.ProjectRepoId)
 	if err != nil {
 		s.log.Debugf(
@@ -162,26 +151,7 @@ func (s *trainingService) Create(cmd *TrainingCreateCmd) (dto JobInfoDTO, err er
 		}
 	}
 
-	v, err := s.ts.Create(&cmd.UserTraining)
-	if err != nil {
-		return
-	}
-
-	dto.JobId = v.JobId
-	dto.LogDir = v.LogDir
-	dto.AimDir = v.AimDir
-	dto.OutputDir = v.OutputDir
-
-	s.ws.WatchTraining(&watch.TrainingInfo{
-		User:       cmd.User,
-		ProjectId:  cmd.ProjectId,
-		TrainingId: cmd.TrainingId,
-		JobInfo:    v,
-	})
-
-	s.currentNum++
-
-	return
+	return s.ts.Create(&cmd.UserTraining)
 }
 
 func (s *trainingService) Delete(jobId string) error {

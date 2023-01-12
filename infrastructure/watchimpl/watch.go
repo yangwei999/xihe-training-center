@@ -1,6 +1,8 @@
 package watchimpl
 
 import (
+	"errors"
+	"sync"
 	"time"
 
 	"github.com/opensourceways/xihe-grpc-protocol/grpc/client"
@@ -15,7 +17,7 @@ type trainingData = pt.TrainingInfo
 
 func NewWatcher(
 	cfg *Config, ts training.Training,
-	maxTrainingNum int, log *logrus.Entry,
+	log *logrus.Entry,
 ) (*Watcher, error) {
 	cli, err := client.NewTrainingClient(cfg.Endpoint)
 	if err != nil {
@@ -23,14 +25,15 @@ func NewWatcher(
 	}
 
 	return &Watcher{
-		log:       log,
-		cli:       cli,
-		ts:        ts,
-		timeout:   cfg.Timeout,
-		interval:  time.Duration(cfg.Interval) * time.Second,
-		stop:      make(chan struct{}),
-		stopped:   make(chan struct{}),
-		trainings: make(chan trainingInfo, maxTrainingNum+1),
+		log:         log,
+		cli:         cli,
+		ts:          ts,
+		timeout:     cfg.Timeout,
+		interval:    time.Duration(cfg.Interval) * time.Second,
+		stop:        make(chan struct{}),
+		stopped:     make(chan struct{}),
+		trainings:   make(chan trainingInfo, cfg.MaxWatchNum+1),
+		maxWatchNum: cfg.MaxWatchNum,
 	}, nil
 }
 
@@ -39,12 +42,11 @@ type trainingInfo struct {
 
 	result trainingData
 
-	done         bool
-	success      bool
-	logDone      bool
-	aimDone      bool
-	outputDone   bool
-	notifyFailed bool
+	done       bool
+	success    bool
+	logDone    bool
+	aimDone    bool
+	outputDone bool
 }
 
 func (t *trainingInfo) toIndex() pt.TrainingIndex {
@@ -65,6 +67,7 @@ func (t *trainingInfo) isDone() bool {
 	return done
 }
 
+// Watcher
 type Watcher struct {
 	log *logrus.Entry
 	cli *client.TrainingClient
@@ -77,10 +80,28 @@ type Watcher struct {
 	stopped   chan struct{}
 	trainings chan trainingInfo
 
-	callback func(*watch.TrainingInfo)
+	lock        sync.RWMutex
+	currentNum  int
+	maxWatchNum int
 }
 
-func (w *Watcher) WatchTraining(t *watch.TrainingInfo) {
+func (w *Watcher) ApplyWatch(f func(*watch.TrainingInfo) error) (err error) {
+	if !w.increase() {
+		return errors.New("exceed max watch num")
+	}
+
+	info := new(watch.TrainingInfo)
+
+	if err = f(info); err != nil {
+		w.decrease()
+	} else {
+		w.addTraining(info)
+	}
+
+	return
+}
+
+func (w *Watcher) addTraining(t *watch.TrainingInfo) {
 	info := trainingInfo{TrainingInfo: *t}
 	if t.AimDir == "" {
 		info.aimDone = true
@@ -93,15 +114,24 @@ func (w *Watcher) WatchTraining(t *watch.TrainingInfo) {
 	w.trainings <- info
 }
 
-func (w *Watcher) RegisterTrainingDone(f func(*watch.TrainingInfo)) {
-	w.callback = f
+func (w *Watcher) increase() (b bool) {
+	w.lock.Lock()
+	if w.currentNum+1 <= w.maxWatchNum {
+		w.currentNum++
+		b = true
+	}
+	w.lock.Unlock()
+
+	return
+}
+
+func (w *Watcher) decrease() {
+	w.lock.Lock()
+	w.currentNum--
+	w.lock.Unlock()
 }
 
 func (w *Watcher) Run() {
-	if w.callback == nil {
-		w.callback = func(*watch.TrainingInfo) {}
-	}
-
 	start := time.Now()
 
 	// add the tag
@@ -132,7 +162,7 @@ func (w *Watcher) Run() {
 					index := info.toIndex()
 
 					if err := w.cli.SetTrainingInfo(&index, &info.result); err == nil {
-						w.callback(&info.TrainingInfo)
+						w.decrease()
 					} else {
 						w.log.Errorf("set training info failed, err:%s", err.Error())
 						w.trainings <- info
@@ -175,17 +205,17 @@ func (w *Watcher) check(info *trainingInfo) (changed bool) {
 			return
 		}
 
+		if detail.Duration != result.Duration {
+			result.Duration = detail.Duration
+			changed = true
+		}
+
 		if s := detail.Status.TrainingStatus(); s != result.Status {
 			result.Status = s
 			changed = true
 		}
 
-		if result.Duration != detail.Duration {
-			result.Duration = detail.Duration
-			changed = true
-		}
-
-		if !changed || !detail.Status.IsDone() {
+		if !detail.Status.IsDone() {
 			if detail.Duration < w.timeout {
 				return
 			}
@@ -201,10 +231,11 @@ func (w *Watcher) check(info *trainingInfo) (changed bool) {
 
 			result.Status = "Timeout"
 			changed = true
+		} else {
+			info.success = detail.Status.IsSuccess()
 		}
 
 		info.done = true
-		info.success = detail.Status.IsSuccess()
 	}
 
 	if !info.logDone {

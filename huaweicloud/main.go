@@ -92,12 +92,12 @@ func main() {
 	}
 
 	// watch
-	ws, err := watchimpl.NewWatcher(&cfg.Watch, ts, cfg.MaxTrainingNum, log)
+	ws, err := watchimpl.NewWatcher(&cfg.Watch, ts, log)
 	if err != nil {
 		log.Errorf("new watch service failed, err:%s", err.Error())
 	}
 
-	service := app.NewTrainingService(ts, p, ws, log, lock, cfg.MaxTrainingNum)
+	service := app.NewTrainingService(ts, p, ws, log, lock)
 
 	go ws.Run()
 
